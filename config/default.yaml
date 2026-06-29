@@ -1,0 +1,81 @@
+project:
+  name: riskrank
+  timezone: UTC
+
+history:
+  default_lookback_days: 180
+  prediction_horizon_days: 90
+
+kafka:
+  bootstrap_servers: kafka:9092
+  client_id: riskrank
+  consumer_group: riskrank-file-sink-v1
+  topics:
+    nvd: risk.raw.nvd
+    epss: risk.raw.epss
+    kev: risk.raw.kev
+    dlq: risk.dlq
+  partitions: 3
+  replication_factor: 1
+
+consumer:
+  max_records_per_file: 10000
+  max_uncompressed_bytes_per_file: 67108864
+  flush_interval_seconds: 30
+  idle_exit_seconds: 30
+
+storage:
+  root: /app/data
+  bronze: /app/data/bronze
+  silver: /app/data/silver
+  gold: /app/data/gold
+  checkpoints: /app/data/checkpoints
+  models: /app/data/models
+  reports: /app/data/reports
+  temp: /app/data/tmp
+
+spark:
+  master: local[8]
+  driver_memory: 8g
+  shuffle_partitions: 32
+  default_parallelism: 16
+  streaming_trigger: availableNow
+  processing_time_seconds: 10
+
+nvd:
+  base_url: https://services.nvd.nist.gov/rest/json/cves/2.0
+  initial_mode: full
+  incremental_date_field: modified
+  results_per_page: 2000
+  request_window_days: 120
+  request_delay_with_key_seconds: 0.7
+  request_delay_without_key_seconds: 6.5
+
+kev:
+  catalog_url: https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
+  ingest_full_catalog: true
+
+epss:
+  raw_url_template: https://raw.githubusercontent.com/empiricalsec/epss_scores/main/{year}/epss_scores-{date}.csv.gz
+
+model:
+  primary_metric: area_under_pr
+  ranking_k: 100
+  train_ratio: 0.60
+  validation_ratio: 0.20
+  test_ratio: 0.20
+  class_weighting: balanced
+  random_seed: 42
+  kev_horizon_days: 90
+
+# AdjustedRisk = 10 * [ w1 * (cvss_base_score / 10) + w2 * P(exploit) + w3 * P(KEV<=90d) ]
+# w1 = cvss_weight, w2 = exploit_weight (Model A predicted EPSS), w3 = kev_weight (Model B prob).
+# Weights are tuned on the validation set; values below are defaults / fallbacks.
+risk_score:
+  cvss_weight: 0.20
+  exploit_weight: 0.30
+  kev_weight: 0.50
+  thresholds:
+    low_max: 25
+    medium_max: 50
+    high_max: 75
