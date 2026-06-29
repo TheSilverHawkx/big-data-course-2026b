@@ -134,6 +134,7 @@ def _paginate_chunk(
                     stats.failed += 1
             else:
                 stats.published += 1
+            stats.maybe_log_progress(2000)
 
         start_index += len(vulns)
         if not vulns or start_index >= total:

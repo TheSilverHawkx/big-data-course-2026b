@@ -101,6 +101,13 @@ def run_file_sink(
 
                 last_msg_mono = time.monotonic()
                 stats["consumed"] += 1
+                if stats["consumed"] % 50000 == 0:
+                    log.info(
+                        "file sink progress: consumed=%d written=%d dlq=%d",
+                        stats["consumed"],
+                        stats["written"],
+                        stats["dlq"],
+                    )
                 source = _source_from_topic(settings, msg.topic())
                 raw_value: bytes = msg.value() or b""
 

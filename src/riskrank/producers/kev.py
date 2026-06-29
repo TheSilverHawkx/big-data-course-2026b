@@ -120,6 +120,7 @@ def run_kev_producer(
                 stats.failed += 1
         else:
             stats.published += 1
+        stats.maybe_log_progress(500)
 
     stats.log_summary()
     return stats

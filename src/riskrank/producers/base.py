@@ -32,6 +32,16 @@ class ProducerStats:
             self.failed,
         )
 
+    def maybe_log_progress(self, every: int = 5000) -> None:
+        """Emit a lightweight progress line every `every` published records."""
+        if self.published and self.published % every == 0:
+            log.info(
+                "%s producer progress: published=%d fetched=%d",
+                self.source,
+                self.published,
+                self.fetched,
+            )
+
 
 def new_run_id() -> str:
     return str(uuid.uuid4())
