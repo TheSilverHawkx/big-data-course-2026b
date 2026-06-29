@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "riskrank"
+version = "0.1.0"
+description = "Big-Data course project: CVE risk ranking pipeline (CVSS + EPSS + CISA KEV)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+
+dependencies = [
+    # Config / Validation
+    "pydantic>=2.7,<3.0",
+    "pydantic-settings>=2.3,<3.0",
+    "PyYAML>=6.0,<7.0",
+    # HTTP
+    "httpx>=0.27,<1.0",
+    "tenacity>=8.3,<10.0",
+    # Kafka
+    "confluent-kafka>=2.4,<3.0",
+    # Spark + ML
+    "pyspark==4.1.0",
+    # Plotting
+    "matplotlib>=3.9,<4.0",
+]
+
+[project.optional-dependencies]
+notebook = [
+    "jupyterlab>=4.2,<5.0",
+    "ipykernel>=6.29,<7.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/riskrank"]
