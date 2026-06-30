@@ -83,7 +83,9 @@ def build_chronological_splits(obs_df, settings, label_as_of_date: date):
     dates_rows = obs_df.select("observation_date").distinct().collect()
     dates = [r["observation_date"] for r in dates_rows]
 
-    boundaries = compute_split_boundaries(dates, model_cfg.train_ratio, model_cfg.val_ratio)
+    boundaries = compute_split_boundaries(
+        dates, model_cfg.train_ratio, model_cfg.validation_ratio
+    )
 
     train_df = obs_df.filter(
         col("observation_date") <= lit(date.fromisoformat(boundaries["train_end"]))

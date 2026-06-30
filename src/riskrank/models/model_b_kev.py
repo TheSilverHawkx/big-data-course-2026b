@@ -47,7 +47,7 @@ def _add_balanced_weight(train_df: DataFrame) -> DataFrame:
 def train_model_b(train_df: DataFrame, *, seed: int = 42, max_iter: int = 40) -> PipelineModel:
     """Fit Model B on rows with a non-null 90-day KEV label."""
     stages, features_col = cvss_feature_stages(
-        extra_numeric=[PRED_COL], output_col="features_b"
+        extra_numeric=[PRED_COL], output_col="features_b", prefix="b_"
     )
     classifier = GBTClassifier(
         featuresCol=features_col,

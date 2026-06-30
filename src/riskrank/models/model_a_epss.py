@@ -29,7 +29,7 @@ def _prep(df: DataFrame) -> DataFrame:
 
 def train_model_a(train_df: DataFrame, *, seed: int = 42, max_iter: int = 40) -> PipelineModel:
     """Fit Model A on rows that have an observed EPSS value."""
-    stages, features_col = cvss_feature_stages(output_col="features_a")
+    stages, features_col = cvss_feature_stages(output_col="features_a", prefix="a_")
     regressor = GBTRegressor(
         featuresCol=features_col,
         labelCol=TARGET,
