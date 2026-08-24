@@ -26,6 +26,12 @@ from riskrank.spark.schemas import (
 
 log = logging.getLogger(__name__)
 
+# The file sink writes a `<part>.jsonl.gz.manifest.json` beside every Bronze part.
+# Spark's JSON source would otherwise read those sidecars as data: each is a
+# pretty-printed object, so every line becomes a corrupt (all-null) record and
+# lands in silver/rejected as `missing_event_id`.
+_BRONZE_FILE_GLOB = "*.jsonl.gz"
+
 # source -> (bronze read schema, normalizer function, silver table subdirectory)
 _SOURCES: dict[str, tuple] = {
     "nvd": (BRONZE_NVD_SCHEMA, normalize_nvd, "nvd_vulnerabilities"),
@@ -101,7 +107,11 @@ def start_bronze_to_silver(
         Path(bronze_path).mkdir(parents=True, exist_ok=True)
         rejected_base.mkdir(parents=True, exist_ok=True)
 
-        stream_df = spark.readStream.schema(schema).json(bronze_path)
+        stream_df = (
+            spark.readStream.schema(schema)
+            .option("pathGlobFilter", _BRONZE_FILE_GLOB)
+            .json(bronze_path)
+        )
 
         batch_writer = _make_batch_writer(normalizer, silver_path, rejected_base)
 

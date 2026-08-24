@@ -45,12 +45,15 @@ _CVSS_DATA_COLUMNS = (
     "availability_impact",
 )
 
-# OSV severity.type -> the NVD metrics array the record belongs in.
+# CVSS version -> the NVD metrics array the record belongs in. normalize_nvd reads
+# cvss_version off whichever array is populated, so 3.0 must not be filed under V31.
 _METRIC_ARRAY_BY_VERSION = {
-    "4": "cvssMetricV40",
-    "3": "cvssMetricV31",
-    "2": "cvssMetricV2",
+    "4.0": "cvssMetricV40",
+    "3.1": "cvssMetricV31",
+    "3.0": "cvssMetricV30",
+    "2.0": "cvssMetricV2",
 }
+_METRIC_ARRAY_FALLBACK = {"4": "cvssMetricV40", "3": "cvssMetricV31", "2": "cvssMetricV2"}
 
 
 def parse_osv_timestamp(value: str | None) -> datetime | None:
@@ -107,7 +110,9 @@ def _metrics(doc: dict, cve_id: str) -> dict:
             continue
 
         version = scored["version"]
-        array_name = _METRIC_ARRAY_BY_VERSION.get(version[0])
+        array_name = _METRIC_ARRAY_BY_VERSION.get(version) or _METRIC_ARRAY_FALLBACK.get(
+            version[:1]
+        )
         if array_name is None:
             continue
 
