@@ -19,6 +19,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, least, lit
 
+from riskrank.common.cvss import VECTOR_DECODE_V3, decode_cvss_vector
 from riskrank.models.model_a_epss import PRED_COL
 from riskrank.models.model_b_kev import KEV_PROB_COL, LABEL
 
@@ -26,30 +27,9 @@ log = logging.getLogger(__name__)
 
 ADJUSTED_RISK_COL = "adjusted_risk"
 
-# CVSS vector abbreviation -> NVD cvssData full-word value (Silver categorical domain).
-_VECTOR_DECODE = {
-    "AV": ({"N": "NETWORK", "A": "ADJACENT_NETWORK", "L": "LOCAL", "P": "PHYSICAL"}, "attack_vector"),
-    "AC": ({"L": "LOW", "H": "HIGH"}, "attack_complexity"),
-    "PR": ({"N": "NONE", "L": "LOW", "H": "HIGH"}, "privileges_required"),
-    "UI": ({"N": "NONE", "R": "REQUIRED"}, "user_interaction"),
-    "S": ({"U": "UNCHANGED", "C": "CHANGED"}, "scope"),
-    "C": ({"H": "HIGH", "L": "LOW", "N": "NONE"}, "confidentiality_impact"),
-    "I": ({"H": "HIGH", "L": "LOW", "N": "NONE"}, "integrity_impact"),
-    "A": ({"H": "HIGH", "L": "LOW", "N": "NONE"}, "availability_impact"),
-}
-
-
-def decode_cvss_vector(vector: str) -> dict[str, str]:
-    """Decode a CVSS vector string into the eight Silver categorical columns."""
-    decoded: dict[str, str] = {}
-    for token in vector.strip().split("/"):
-        if ":" not in token:
-            continue
-        metric, _, value = token.partition(":")
-        if metric in _VECTOR_DECODE:
-            mapping, column = _VECTOR_DECODE[metric]
-            decoded[column] = mapping.get(value.upper(), value.upper())
-    return decoded
+# The vector abbreviation -> Silver-column maps live in riskrank.common.cvss, which
+# Bronze also uses to recompute base scores; re-exported here for backwards compat.
+_VECTOR_DECODE = VECTOR_DECODE_V3
 
 
 def add_adjusted_risk(

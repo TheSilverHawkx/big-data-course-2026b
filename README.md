@@ -6,7 +6,8 @@ combining the **CVSS** vector, the **EPSS** exploitation-probability score, and 
 
 ```
 Python producers ──▶ Kafka topics ──▶ File-sink consumer ──▶ Bronze (.jsonl.gz)
-  NVD / EPSS / KEV     risk.raw.*          validate envelope        append-only
+  CVE / EPSS / KEV     risk.raw.*          validate envelope        append-only
+  (local OSV corpus)
 
 Bronze ──▶ PySpark Structured Streaming ──▶ Silver (Parquet)
                 normalize + decode CVSS         nvd / epss_daily / kev_catalog
@@ -36,7 +37,8 @@ uv sync --all-extras
 make up
 make topics                       # http://localhost:8080  (Kafka UI)
 
-# 3. Ingest (NVD key already read from .env)
+# 3. Ingest — CVE records come from the local OSV corpus in data/raw_osv/
+#    (~81k CVE-YYYY-NNNN.json files; see "CVE input" below). EPSS/KEV are fetched.
 make produce-nvd
 make produce-epss
 make produce-kev
@@ -54,15 +56,29 @@ make score VECTOR="CVSS:3.1/AV:N/AC:H/PR:L/UI:R/S:U/C:H/I:H/A:N" BASE=7.0
 
 All commands are plain entrypoints, e.g. `python -m riskrank.producers.nvd --help`.
 
+## CVE input
+
+CVE records are **read from disk, not the NVD API**. Drop a directory of per-CVE
+[OSV](https://ossf.github.io/osv-schema/) documents (`CVE-YYYY-NNNN.json`, one JSON
+object per file) at `data/raw_osv/` — the path is `nvd.input_dir` in
+`config/default.yaml`, overridable with `NVD__INPUT_DIR`.
+
+`riskrank.producers.osv_adapter` translates each document into the NVD API 2.0 `cve`
+payload shape, so Bronze/Silver/Gold are unchanged. OSV ships CVSS **vector strings
+only**, so `riskrank.common.cvss` recomputes `baseScore`, `baseSeverity` and the
+exploitability/impact sub-scores (exact for CVSS 2.0/3.x/4.0, via the `cvss` library).
+Withdrawn and `** REJECT **` records are dropped, matching the old API's `noRejected`.
+
 ## Layout
 
 | Path | Purpose |
 |------|---------|
-| `src/riskrank/producers/` | NVD / EPSS / KEV producers → Kafka |
+| `src/riskrank/producers/` | CVE (local OSV) / EPSS / KEV producers → Kafka |
 | `src/riskrank/consumers/` | File-sink consumer → Bronze `.jsonl.gz` |
 | `src/riskrank/spark/`     | Bronze→Silver normalizers, Silver→Gold features/labels |
 | `src/riskrank/models/`    | Model A, Model B, AdjustedRisk scoring, evaluation |
 | `config/default.yaml`     | All settings (Kafka, Spark, sources, model, risk weights) |
+| `data/raw_osv/`           | Input corpus: per-CVE OSV JSON files (gitignored) |
 | `data/`                   | Bronze/Silver/Gold/models/reports (gitignored) |
 
 See `docs/architecture.md` for details and `docs/limitations.md` for caveats.

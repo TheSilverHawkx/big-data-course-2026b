@@ -75,13 +75,10 @@ class SparkConfig(BaseModel):
 
 
 class NvdConfig(BaseModel):
-    base_url: str = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-    initial_mode: str = "full"
-    incremental_date_field: str = "modified"
-    results_per_page: int = 2000
-    request_window_days: int = 120
-    request_delay_with_key_seconds: float = 0.7
-    request_delay_without_key_seconds: float = 6.5
+    """CVE input. The corpus is read from disk (OSV format), not the NVD API."""
+
+    input_dir: str = "/app/data/raw_osv"
+    file_glob: str = "*.json"
 
 
 class KevConfig(BaseModel):
@@ -165,7 +162,6 @@ class Settings(BaseSettings):
     risk_score: RiskScoreConfig = Field(default_factory=RiskScoreConfig)
 
     # Top-level env vars (not nested in YAML)
-    nvd_api_key: str | None = Field(default=None, alias="NVD_API_KEY")
     kafka_bootstrap_servers: str | None = Field(default=None, alias="KAFKA_BOOTSTRAP_SERVERS")
 
     model_config = {  # type: ignore[misc]

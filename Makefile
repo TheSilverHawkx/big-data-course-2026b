@@ -27,8 +27,8 @@ topics:            ## Create all Kafka topics
 	docker compose exec ingestion python -m riskrank.kafka.admin
 
 # ── Ingestion (run inside the ingestion container) ────────────────────────────
-produce-nvd:
-	docker compose exec ingestion python -m riskrank.producers.nvd --mode modified --max-records 200
+produce-nvd:       ## Read the local OSV corpus (data/raw_osv) -> Kafka
+	docker compose exec ingestion python -m riskrank.producers.nvd
 
 produce-epss:
 	docker compose exec ingestion python -m riskrank.producers.epss --lookback-days 180
