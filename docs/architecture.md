@@ -3,10 +3,17 @@
 ## Data flow
 
 ```
-NVD CVE API 2.0 ─┐
-EPSS daily CSV  ─┼─▶ producers ─▶ Kafka (KRaft) ─▶ file-sink ─▶ Bronze (.jsonl.gz)
-CISA KEV JSON   ─┘    make_envelope    risk.raw.*     consumer      source/ingest_date/run_id
+Local OSV corpus ─┐   OSV→NVD adapter
+(data/raw_osv/)   │
+EPSS daily CSV   ─┼─▶ producers ─▶ Kafka (KRaft) ─▶ file-sink ─▶ Bronze (.jsonl.gz)
+CISA KEV JSON    ─┘    make_envelope    risk.raw.*     consumer     source/ingest_date/run_id
 ```
+
+- **CVE source**: a directory of per-CVE OSV documents on disk (`nvd.input_dir`), not
+  the NVD REST API. `producers/osv_adapter.py` reshapes each document into the NVD API
+  2.0 `cve` object and `common/cvss.py` recomputes the base/exploitability/impact scores
+  from the vector string, so the Bronze payload contract is unchanged and the source
+  name stays `nvd` throughout Kafka, Bronze and Silver.
 
 - **Kafka**: single-node KRaft broker (`apache/kafka:4.1.2`), no ZooKeeper.
   Topics: `risk.raw.nvd`, `risk.raw.epss`, `risk.raw.kev` (3 partitions each),

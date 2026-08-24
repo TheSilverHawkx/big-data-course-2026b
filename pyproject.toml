@@ -24,6 +24,7 @@ dependencies = [
     "pyspark==4.1.0",
     # Plotting
     "matplotlib>=3.9,<4.0",
+    "cvss>=3.4,<4.0",
 ]
 
 [project.optional-dependencies]

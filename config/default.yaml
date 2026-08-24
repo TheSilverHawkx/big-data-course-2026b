@@ -42,14 +42,11 @@ spark:
   streaming_trigger: availableNow
   processing_time_seconds: 10
 
+# CVE input: a local directory of per-CVE OSV documents (CVE-YYYY-NNNN.json),
+# translated to the NVD API 2.0 payload shape by riskrank.producers.osv_adapter.
 nvd:
-  base_url: https://services.nvd.nist.gov/rest/json/cves/2.0
-  initial_mode: full
-  incremental_date_field: modified
-  results_per_page: 2000
-  request_window_days: 120
-  request_delay_with_key_seconds: 0.7
-  request_delay_without_key_seconds: 6.5
+  input_dir: /app/data/raw_osv
+  file_glob: "*.json"
 
 kev:
   catalog_url: https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
