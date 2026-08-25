@@ -222,3 +222,5 @@ __marimo__/
 !/data/
 !/data/*/
 !/data/**/.gitkeep
+# The input CVE corpus, committed as a single archive (see README "CVE input").
+!/data/raw_osv.tar.gz
