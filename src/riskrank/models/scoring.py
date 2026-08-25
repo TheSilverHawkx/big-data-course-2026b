@@ -44,6 +44,43 @@ def add_adjusted_risk(
     return df.withColumn(col_name, score)
 
 
+# ── Display scale ─────────────────────────────────────────────────────────────
+#
+# AdjustedRisk is a *ranking* score, not an absolute 0-10 severity. It is a weighted
+# average of two probabilities that are tiny for almost every CVE (median P(KEV<=90d)
+# is ~0.03), so the raw number is near zero even for a CVSS 9.8 vector — and when the
+# tuner sets w1_cvss = 0 it stops tracking CVSS magnitude altogether. Reporting the
+# raw value as a "0-10 priority" invites the reader to compare it against a CVSS base
+# score, which is meaningless.
+#
+# So we keep the raw score for ordering and publish a percentile alongside it: where
+# this CVE sits in the distribution of a reference population. That is the quantity a
+# reader actually wants ("top 1% of what I could be patching").
+PERCENTILE_CUT_COUNT = 101
+
+
+def build_score_percentiles(
+    scored_df: DataFrame, *, score_col: str = ADJUSTED_RISK_COL, n: int = PERCENTILE_CUT_COUNT
+) -> list[float]:
+    """Quantile cut-points of `score_col`, for mapping a raw score to a percentile."""
+    probs = [i / (n - 1) for i in range(n)]
+    cuts = scored_df.approxQuantile(score_col, probs, 0.0001)
+    # approxQuantile can return a non-monotonic tail on ties; enforce monotonicity.
+    for i in range(1, len(cuts)):
+        cuts[i] = max(cuts[i], cuts[i - 1])
+    return [float(c) for c in cuts]
+
+
+def percentile_of(score: float, cuts: list[float]) -> float:
+    """Map a raw score to its 0-100 percentile within the reference distribution."""
+    import bisect
+
+    if not cuts:
+        return 0.0
+    idx = bisect.bisect_right(cuts, float(score))
+    return round(100.0 * idx / len(cuts), 2)
+
+
 def _ranking_pr_auc(scored_df: DataFrame, score_col: str) -> float:
     """PR-AUC of a continuous score against the 90-day KEV label."""
     # BinaryClassificationEvaluator needs the raw score as a 2-element probability
@@ -103,6 +140,7 @@ def score_single_vector(
     cwe_count: int = 0,
     reference_count: int = 0,
     cpe_match_count: int = 0,
+    percentile_cuts: list[float] | None = None,
 ) -> dict[str, float]:
     """Score one CVSS vector end-to-end (the screenshot demo)."""
     from riskrank.models.model_a_epss import apply_model_a
@@ -124,13 +162,20 @@ def score_single_vector(
     w1, w2, w3 = weights
     df = add_adjusted_risk(df, w1, w2, w3)
     out = df.select(PRED_COL, KEV_PROB_COL, ADJUSTED_RISK_COL).collect()[0]
-    return {
+    raw = float(out[ADJUSTED_RISK_COL])
+    result = {
         "cvss_only_priority": float(cvss_base_score),
         "pred_exploit_epss": float(out[PRED_COL]),
         "pred_kev_prob_90d": float(out[KEV_PROB_COL]),
-        "adjusted_risk": float(out[ADJUSTED_RISK_COL]),
+        "adjusted_risk": raw,
         "weights": {"w1_cvss": w1, "w2_exploit": w2, "w3_kev": w3},
     }
+    if percentile_cuts:
+        pct = percentile_of(raw, percentile_cuts)
+        # The headline number: raw AdjustedRisk is a ranking score, not a severity.
+        result["adjusted_risk_percentile"] = pct
+        result["priority_0_10"] = round(pct / 10.0, 2)
+    return result
 
 
 def main() -> None:
@@ -165,6 +210,13 @@ def main() -> None:
         rs = settings.risk_score
         weights = (rs.cvss_weight, rs.exploit_weight, rs.kev_weight)
 
+    percentiles_path = paths.models / "score_percentiles.json"
+    percentile_cuts = (
+        json.loads(percentiles_path.read_text(encoding="utf-8"))["cuts"]
+        if percentiles_path.exists()
+        else None
+    )
+
     spark = build_spark_session(settings, app_name="riskrank-score")
     spark.sparkContext.setLogLevel("WARN")
     try:
@@ -182,6 +234,7 @@ def main() -> None:
             cwe_count=args.cwe_count,
             reference_count=args.reference_count,
             cpe_match_count=args.cpe_match_count,
+            percentile_cuts=percentile_cuts,
         )
     finally:
         spark.stop()

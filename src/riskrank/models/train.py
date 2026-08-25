@@ -19,10 +19,15 @@ import json
 import logging
 
 from riskrank.config import get_settings
-from riskrank.models.evaluate import score_pr_auc, top_k_hit_rate
+from riskrank.models.evaluate import (
+    score_pr_auc,
+    score_pr_auc_by_date,
+    top_k_hit_rate,
+    top_k_hit_rate_by_date,
+)
 from riskrank.models.model_a_epss import apply_model_a, evaluate_model_a, train_model_a
 from riskrank.models.model_b_kev import apply_model_b, evaluate_model_b, train_model_b
-from riskrank.models.scoring import add_adjusted_risk, tune_weights
+from riskrank.models.scoring import add_adjusted_risk, build_score_percentiles, tune_weights
 from riskrank.paths import ProjectPaths
 from riskrank.spark.gold import read_gold_observations
 from riskrank.spark.session import build_spark_session
@@ -83,16 +88,39 @@ def run_training(settings, *, ranking_k: int | None = None) -> dict:
             "adjusted_top_k": top_k_hit_rate(test_scored, "adjusted_risk", k),
         }
 
+        # Per-date macro-averages. Preferred over the pooled numbers above: one CVE
+        # contributes a positive row on every observation date inside the 90-day
+        # window, so pooled ranking lets a single vulnerability dominate the metric.
+        test_scored.cache()
+        report["test_ranking_by_date"] = {
+            "baseline_cvss": score_pr_auc_by_date(test_scored, "cvss_base_score"),
+            "adjusted": score_pr_auc_by_date(test_scored, "adjusted_risk"),
+            "baseline_top_k": top_k_hit_rate_by_date(test_scored, "cvss_base_score", k),
+            "adjusted_top_k": top_k_hit_rate_by_date(test_scored, "adjusted_risk", k),
+        }
+
+        # ── Display scale ───────────────────────────────────────────────────────
+        # Reference distribution for turning a raw AdjustedRisk into a percentile.
+        # Built on validation so nothing from the test split leaks into a shipped artefact.
+        val_scored = add_adjusted_risk(val_b, w1, w2, w3)
+        percentile_cuts = build_score_percentiles(val_scored)
+
         # ── Persist models + reports ────────────────────────────────────────────
         model_a.write().overwrite().save(str(paths.models / "model_a_epss"))
         model_b.write().overwrite().save(str(paths.models / "model_b_kev"))
         (paths.models / "weights.json").write_text(
             json.dumps(report["weights"], indent=2), encoding="utf-8"
         )
+        (paths.models / "score_percentiles.json").write_text(
+            json.dumps({"score_col": "adjusted_risk", "source_split": "validation",
+                        "cuts": percentile_cuts}, indent=2),
+            encoding="utf-8",
+        )
         (paths.reports / "training_metrics.json").write_text(
             json.dumps(report, indent=2, default=str), encoding="utf-8"
         )
         log.info("training complete: %s", json.dumps(report["test_ranking"], default=str))
+        test_scored.unpersist()
     finally:
         spark.stop()
 
