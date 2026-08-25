@@ -30,8 +30,10 @@ topics:            ## Create all Kafka topics
 produce-nvd:       ## Read the local OSV corpus (data/raw_osv) -> Kafka
 	docker compose exec ingestion python -m riskrank.producers.nvd
 
-produce-epss:
-	docker compose exec ingestion python -m riskrank.producers.epss --lookback-days 180
+# 3 years of history sampled on the 1st + 15th (~72 score dates). Daily over the same
+# span is ~1,100 files / ~317M rows for near-duplicate observations; see docs/limitations.md.
+produce-epss:      ## 3y of EPSS snapshots, semi-monthly cadence -> Kafka
+	docker compose exec ingestion python -m riskrank.producers.epss --lookback-days 1095 --days-of-month 1,15
 
 produce-kev:
 	docker compose exec ingestion python -m riskrank.producers.kev

@@ -40,7 +40,7 @@ make topics                       # http://localhost:8080  (Kafka UI)
 # 3. Ingest — CVE records come from the local OSV corpus in data/raw_osv/
 #    (~81k CVE-YYYY-NNNN.json files; see "CVE input" below). EPSS/KEV are fetched.
 make produce-nvd
-make produce-epss
+make produce-epss                 # 3y of snapshots, 1st + 15th (~72 score dates)
 make produce-kev
 make consume                      # Kafka -> Bronze
 make validate

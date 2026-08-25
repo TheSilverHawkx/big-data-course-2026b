@@ -19,7 +19,7 @@ from datetime import date
 
 from confluent_kafka import Producer
 
-from riskrank.common.dates import date_range, utcnow
+from riskrank.common.dates import sampled_date_range, utcnow
 from riskrank.common.http import build_client, get_with_retry
 from riskrank.config import Settings, get_settings
 from riskrank.contracts.envelope import make_envelope
@@ -75,22 +75,36 @@ def run_epss_producer(
     start_date: date | None = None,
     end_date: date | None = None,
     lookback_days: int = 180,
+    days_of_month: tuple[int, ...] | None = None,
     run_id: str | None = None,
     dry_run: bool = False,
     max_records: int | None = None,
     strict: bool = False,
 ) -> ProducerStats:
-    """Iterate every date in range, download the EPSS CSV, publish one message per CVE row."""
+    """
+    Iterate the dates in range, download the EPSS CSV, publish one message per CVE row.
+
+    ``days_of_month`` thins a long span to selected days (e.g. ``(1, 15)``); see
+    :func:`riskrank.common.dates.sampled_date_range`.
+    """
     if run_id is None:
         run_id = new_run_id()
     stats = ProducerStats(source="epss", run_id=run_id)
     start, end = resolve_date_range(start_date, end_date, lookback_days)
+    score_days = sampled_date_range(start, end, days_of_month)
+    log.info(
+        "EPSS range %s..%s -> %d score dates (days_of_month=%s)",
+        start,
+        end,
+        len(score_days),
+        days_of_month or "all",
+    )
     topic = settings.kafka.topics.epss
     url_template = settings.epss.raw_url_template
     fetched_at = utcnow()
 
     with build_client() as client:
-        for score_day in date_range(start, end):
+        for score_day in score_days:
             if max_records is not None and stats.published >= max_records:
                 break
 
@@ -180,11 +194,27 @@ def run_epss_producer(
     return stats
 
 
+def _parse_days_of_month(value: str | None) -> tuple[int, ...] | None:
+    """Parse '1,15' into (1, 15). Empty/None means every day in range."""
+    if not value:
+        return None
+    days = tuple(sorted({int(part) for part in value.split(",") if part.strip()}))
+    if any(not 1 <= d <= 31 for d in days):
+        raise argparse.ArgumentTypeError(f"days-of-month out of range: {value}")
+    return days or None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="EPSS daily score producer")
     parser.add_argument("--start-date", type=date.fromisoformat, default=None)
     parser.add_argument("--end-date", type=date.fromisoformat, default=None)
     parser.add_argument("--lookback-days", type=int, default=180)
+    parser.add_argument(
+        "--days-of-month",
+        type=_parse_days_of_month,
+        default=None,
+        help="thin a long span to these days, e.g. '1,15' (default: every day in range)",
+    )
     parser.add_argument("--max-records", type=int, default=None)
     parser.add_argument("--strict", action="store_true", help="fail on missing daily file")
     parser.add_argument("--dry-run", action="store_true")
@@ -199,6 +229,7 @@ def main() -> None:
             start_date=args.start_date,
             end_date=args.end_date,
             lookback_days=args.lookback_days,
+            days_of_month=args.days_of_month,
             dry_run=args.dry_run,
             max_records=args.max_records,
             strict=args.strict,
